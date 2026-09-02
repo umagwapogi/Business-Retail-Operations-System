@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: retail_ops_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: retail_ops
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - retail_ops_network
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: retail_ops_server
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/retail_ops?schema=public
+      JWT_SECRET: retail_ops_super_secret_jwt_key_for_production_use
+      JWT_REFRESH_SECRET: retail_ops_refresh_token_secret_for_production_use
+      JWT_EXPIRY: 15m
+      JWT_REFRESH_EXPIRY: 7d
+      PORT: 5000
+      NODE_ENV: production
+      FRONTEND_URL: http://localhost:3000
+      RATE_LIMIT_WINDOW_MS: 900000
+      RATE_LIMIT_MAX_REQUESTS: 100
+    depends_on:
+      - postgres
+    networks:
+      - retail_ops_network
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+      - /app/dist
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: retail_ops_client
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    environment:
+      VITE_API_URL: http://localhost:5000/api
+    depends_on:
+      - server
+    networks:
+      - retail_ops_network
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+      - /app/dist
+
+volumes:
+  postgres_data:
+
+networks:
+  retail_ops_network:
+    driver: bridge
