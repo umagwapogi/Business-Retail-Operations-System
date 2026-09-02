@@ -1,0 +1,146 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  STAFF
+  MANAGER
+  ADMIN
+}
+
+enum TransactionType {
+  PURCHASE
+  REFUND
+  POINTS_ADJUSTMENT
+  REWARD_REDEMPTION
+}
+
+enum RewardClaimStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum SubscriptionTier {
+  BASIC
+  PREMIUM
+  ENTERPRISE
+}
+
+model Business {
+  id                String         @id @default(uuid())
+  name              String
+  owner_id          String
+  subscription_tier SubscriptionTier @default(BASIC)
+  created_at        DateTime       @default(now())
+  updated_at        DateTime       @updatedAt
+  locations         Location[]
+  users             User[]
+
+  @@index([owner_id])
+}
+
+model Location {
+  id          String   @id @default(uuid())
+  name        String
+  address     String?
+  phone       String?
+  business_id String
+  business    Business @relation(fields: [business_id], references: [id], onDelete: Cascade)
+  users       User[]
+  transactions Transaction[]
+
+  @@index([business_id])
+}
+
+model User {
+  id             String    @id @default(uuid())
+  email          String    @unique
+  password_hash  String
+  role           UserRole  @default(CUSTOMER)
+  points_balance Int       @default(0)
+  location_id    String?
+  location       Location? @relation(fields: [location_id], references: [id], onDelete: SetNull)
+  business_id    String?
+  business       Business? @relation(fields: [business_id], references: [id], onDelete: SetNull)
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+  transactions   Transaction[] @relation("UserTransactions")
+  staff_transactions Transaction[] @relation("StaffTransactions")
+  reward_claims  RewardClaim[]
+  audit_logs     AuditLog[]
+
+  @@index([email])
+  @@index([location_id])
+  @@index([business_id])
+}
+
+model Transaction {
+  id          String          @id @default(uuid())
+  user_id     String
+  user        User            @relation("UserTransactions", fields: [user_id], references: [id], onDelete: Cascade)
+  staff_id    String?
+  staff       User?           @relation("StaffTransactions", fields: [staff_id], references: [id], onDelete: SetNull)
+  location_id String
+  location    Location        @relation(fields: [location_id], references: [id], onDelete: Cascade)
+  type        TransactionType
+  amount      Float
+  points_change Int
+  description String?
+  created_at  DateTime        @default(now())
+
+  @@index([user_id])
+  @@index([staff_id])
+  @@index([location_id])
+  @@index([created_at])
+}
+
+model Reward {
+  id              String   @id @default(uuid())
+  name            String
+  description     String?
+  points_required Int
+  stock_quantity  Int      @default(0)
+  is_active       Boolean  @default(true)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+  reward_claims   RewardClaim[]
+
+  @@index([is_active])
+}
+
+model RewardClaim {
+  id          String          @id @default(uuid())
+  user_id     String
+  user        User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  reward_id   String
+  reward      Reward          @relation(fields: [reward_id], references: [id], onDelete: Cascade)
+  points_spent Int
+  claimed_at  DateTime        @default(now())
+  status      RewardClaimStatus @default(PENDING)
+
+  @@index([user_id])
+  @@index([reward_id])
+  @@index([status])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  user_id     String?
+  user        User?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
+  action      String
+  entity_type String
+  entity_id   String?
+  timestamp   DateTime @default(now())
+  details     String?
+
+  @@index([user_id])
+  @@index([entity_type, entity_id])
+  @@index([timestamp])
+}
